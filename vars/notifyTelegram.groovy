@@ -16,7 +16,8 @@ def call(String status) {
         returnStdout: true
     ).trim()
 
-    def elapsedSeconds = ((System.currentTimeMillis() - currentBuild.startTimeInMillis) / 1000) as int
+    def elapsedSeconds =
+        ((System.currentTimeMillis() - currentBuild.startTimeInMillis) / 1000) as int
 
     def icon
     def title
@@ -54,14 +55,30 @@ def call(String status) {
 🔨 Build #${env.BUILD_NUMBER}${durationLine}
 🔗 ${env.BUILD_URL}"""
 
-    withCredentials([
-        string(credentialsId: 'telegram-bot-token', variable: 'BOT_TOKEN'),
-        string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')
-    ]) {
-        sh """
-            curl -sS -X POST "https://api.telegram.org/bot\${BOT_TOKEN}/sendMessage" \
-                -d chat_id="\${CHAT_ID}" \
-                --data-urlencode "text=${message}"
-        """
+    try {
+        withCredentials([
+            string(credentialsId: 'telegram-bot-token', variable: 'BOT_TOKEN'),
+            string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')
+        ]) {
+            def exitCode = sh(
+                script: """
+                    curl --silent \
+                         --show-error \
+                         --fail \
+                         --connect-timeout 5 \
+                         --max-time 10 \
+                         -X POST "https://api.telegram.org/bot\${BOT_TOKEN}/sendMessage" \
+                         -d chat_id="\${CHAT_ID}" \
+                         --data-urlencode "text=${message}"
+                """,
+                returnStatus: true
+            )
+
+            if (exitCode != 0) {
+                echo "⚠️ Telegram notification unreachable (exit code: ${exitCode}). CI continues."
+            }
+        }
+    } catch (Exception error) {
+        echo "⚠️ Telegram notification failed: ${error.message}. CI continues."
     }
 }
