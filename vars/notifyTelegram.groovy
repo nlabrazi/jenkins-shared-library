@@ -1,4 +1,4 @@
-def call(String status) {
+def call(String status, Map details = [:]) {
     def project = env.JOB_NAME?.tokenize('/')?.first() ?: env.JOB_NAME
     def branch = env.BRANCH_NAME ?: 'unknown'
 
@@ -41,6 +41,11 @@ def call(String status) {
             durationLine = "\n⏱️ ${elapsedSeconds}s"
             break
 
+        case 'package_published':
+            icon = '📦'
+            title = 'PACKAGE PUBLISHED'
+            break
+
         default:
             icon = 'ℹ️'
             title = status.toUpperCase()
@@ -54,6 +59,18 @@ def call(String status) {
 🧾 ${commit} — ${commitMessage}
 🔨 Build #${env.BUILD_NUMBER}${durationLine}
 🔗 ${env.BUILD_URL}"""
+
+    if (status == 'package_published') {
+        def packageName = details.packageName ?: 'unknown'
+        def packageVersion = details.version ?: 'unknown'
+        message = """📦 PACKAGE PUBLISHED
+
+📦 ${packageName}
+🏷️ Version : ${packageVersion}
+🌿 ${branch}
+🔨 Build #${env.BUILD_NUMBER}
+🔗 ${env.BUILD_URL}"""
+    }
 
     try {
         withCredentials([
