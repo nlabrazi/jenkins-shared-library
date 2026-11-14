@@ -27,15 +27,6 @@ def call(Map config = [:]) {
         }
       }
 
-      stage('Notify Renovate PR') {
-        when {
-          changeRequest target: 'staging'
-        }
-        steps {
-          notifyRenovatePr()
-        }
-      }
-
       stage('Install') {
         steps {
           npmCi(

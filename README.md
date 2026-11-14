@@ -54,7 +54,7 @@ The goal is to keep individual `Jenkinsfile` files small and focused on project-
 - 📦 Versioned independently from application repositories.
 - 🔐 Ephemeral `.npmrc` generation for `@nlabrazi` GitHub Packages without leaking credentials.
 - 🐳 Docker BuildKit helper (`dockerBuildWithPackages`) injecting GitHub Packages authentication secrets cleanly.
-- 📬 Telegram notifications (`notifyTelegram`, `notifyRenovatePr`) for build status, Renovate PRs, and package releases.
+- 📬 Telegram notifications (`notifyTelegram`) for build status and package releases.
 - 🧩 Complete declarative Node/Nuxt pipeline (`standardNodePipeline`) for standardized projects.
 
 ---
@@ -92,7 +92,6 @@ This repository is not a standalone application. Jenkins loads it as a **Global 
 jenkins-shared-library/
 ├── vars/
 │   ├── dockerBuildWithPackages.groovy
-│   ├── notifyRenovatePr.groovy
 │   ├── notifyTelegram.groovy
 │   ├── npmCi.groovy
 │   └── standardNodePipeline.groovy
@@ -180,15 +179,6 @@ pipeline {
         stage('Notify start') {
             steps {
                 notifyTelegram('started')
-            }
-        }
-
-        stage('Notify Renovate PR') {
-            when {
-                changeRequest target: 'staging'
-            }
-            steps {
-                notifyRenovatePr()
             }
         }
 
