@@ -46,31 +46,25 @@
 <a name="description"></a>
 ### ℹ️ Description
 
-Jenkins Shared Library is a reusable Jenkins Pipeline library used to centralize common CI/CD logic across multiple repositories.
+Jenkins Shared Library (`nabster-ci`) is a reusable Jenkins Pipeline library used to centralize common CI/CD logic across multiple repositories.
 
-The goal is to keep individual `Jenkinsfile` files small and focused on project-specific build steps while shared concerns such as notifications, reusable helpers, and deployment utilities live in one versioned repository.
-
-The first shared capability is Telegram CI notification support through the Telegram Bot API.
+The goal is to keep individual `Jenkinsfile` files small and focused on project-specific build steps while shared concerns such as Telegram notifications, GitHub Packages authentication, Docker BuildKit secret injection, and standard Node/Nuxt pipelines live in one versioned repository.
 
 - ♻️ Reusable Jenkins Pipeline helpers shared across multiple repositories.
 - 📦 Versioned independently from application repositories.
-- 🔐 Jenkins credentials remain stored in Jenkins and are never committed to Git.
-- 📬 Telegram notifications can be triggered from any Pipeline with a single helper call.
-- 🧩 Designed to progressively host common CI/CD logic without turning project `Jenkinsfile` files into large scripts.
-- 🛠️ Compatible with Jenkins Declarative Pipelines and Multibranch Pipelines.
+- 🔐 Ephemeral `.npmrc` generation for `@nlabrazi` GitHub Packages without leaking credentials.
+- 🐳 Docker BuildKit helper (`dockerBuildWithPackages`) injecting GitHub Packages authentication secrets cleanly.
+- 📬 Telegram notifications (`notifyTelegram`, `notifyRenovatePr`) for build status, Renovate PRs, and package releases.
+- 🧩 Complete declarative Node/Nuxt pipeline (`standardNodePipeline`) for standardized projects.
 
 ---
 
 <a name="planned-features"></a>
 ## 🚀 Planned Features
 
-- 📬 Enrich Telegram notifications with branch, commit, author, build URL and duration.
 - 🔄 Add shared helpers for deployment workflows.
-- 🐳 Add reusable Docker build and cleanup helpers.
-- ✅ Add common CI helpers for Node.js projects.
-- 🧪 Add reusable test/reporting helpers where useful.
 - 📊 Integrate deployment status with Sentinel.
-- 🔔 Add notification rules such as `failure`, `fixed`, and deployment-only events.
+- 🔔 Add notification rules such as `fixed` and deployment-only events.
 
 ---
 
@@ -97,23 +91,16 @@ This repository is not a standalone application. Jenkins loads it as a **Global 
 ```text
 jenkins-shared-library/
 ├── vars/
-│   └── notifyTelegram.groovy
+│   ├── dockerBuildWithPackages.groovy
+│   ├── notifyRenovatePr.groovy
+│   ├── notifyTelegram.groovy
+│   ├── npmCi.groovy
+│   └── standardNodePipeline.groovy
+├── renovate.json
 └── README.md
 ```
 
 Jenkins automatically exposes files inside `vars/` as global Pipeline steps.
-
-For example:
-
-```text
-vars/notifyTelegram.groovy
-```
-
-becomes available in a Pipeline as:
-
-```groovy
-notifyTelegram('✅ SUCCESS')
-```
 
 ---
 
@@ -132,13 +119,11 @@ Add a library with settings similar to:
 
 ```text
 Name: nabster-ci
-Default version: main
+Default version: master
 Retrieval method: Modern SCM
 SCM: Git
 Repository URL: https://github.com/nlabrazi/jenkins-shared-library.git
 ```
-
-If the repository is private, select the appropriate GitHub credential.
 
 A Pipeline can then load the library with:
 
@@ -151,34 +136,35 @@ A Pipeline can then load the library with:
 <a name="credentials"></a>
 ### 🔐 Credentials
 
-Secrets are stored in Jenkins Credentials and must never be committed to this repository.
+Secrets are stored in Jenkins Credentials and must never be committed to this repository:
 
-The Telegram helper currently expects:
-
-```text
-telegram-bot-token
-telegram-chat-id
-```
-
-Both should be created as **Secret text** credentials in Jenkins.
-
-Example Jenkins locations:
-
-```text
-Manage Jenkins
-→ Credentials
-→ System
-→ Global credentials
-```
-
-The shared library accesses them through Jenkins' `withCredentials` mechanism only while the notification step is running.
+- `telegram-bot-token` (Secret text) — Telegram Bot API token
+- `telegram-chat-id` (Secret text) — Target Telegram chat ID
+- `github-packages-publish` (Secret text) — GitHub token with `read:packages` / `write:packages` for `@nlabrazi` packages
 
 ---
 
 <a name="usage"></a>
 ### ▶️ Usage
 
-Example Declarative Pipeline:
+#### 1. Full Standard Node/Nuxt Pipeline (`standardNodePipeline`)
+
+For standardized Node/Nuxt repositories following the `check`, `typecheck`, `test`, `build`, `test:e2e` script contract:
+
+```groovy
+@Library('nabster-ci') _
+
+standardNodePipeline(
+    image: 'node:26',
+    typecheck: true,
+    unitTests: true,
+    build: true
+)
+```
+
+#### 2. Granular Helpers inside a Custom Declarative Pipeline
+
+For repositories requiring custom stages (e.g. Python + Node, Electron, or custom Docker builds):
 
 ```groovy
 @Library('nabster-ci') _
@@ -186,66 +172,60 @@ Example Declarative Pipeline:
 pipeline {
     agent {
         docker {
-            image 'node:24'
+            image 'node:26'
         }
     }
 
     stages {
+        stage('Notify start') {
+            steps {
+                notifyTelegram('started')
+            }
+        }
+
+        stage('Notify Renovate PR') {
+            when {
+                changeRequest target: 'staging'
+            }
+            steps {
+                notifyRenovatePr()
+            }
+        }
+
         stage('Install') {
             steps {
-                sh 'npm ci'
+                npmCi()
             }
         }
 
-        stage('Check') {
+        stage('Check & Test') {
             steps {
                 sh 'npm run check'
-            }
-        }
-
-        stage('Unit tests') {
-            steps {
-                sh 'npm run test:unit'
-            }
-        }
-
-        stage('Build') {
-            steps {
+                sh 'npm test'
                 sh 'npm run build'
+            }
+        }
+
+        stage('Docker build') {
+            steps {
+                dockerBuildWithPackages(
+                    image: 'myapp:ci',
+                    target: 'prod'
+                )
             }
         }
     }
 
     post {
         success {
-            notifyTelegram('✅ CI SUCCESS')
+            notifyTelegram('success')
         }
-
         failure {
-            notifyTelegram('❌ CI FAILED')
+            notifyTelegram('failed')
         }
     }
 }
 ```
-
-Current Telegram helper:
-
-```groovy
-def call(String status) {
-    withCredentials([
-        string(credentialsId: 'telegram-bot-token', variable: 'BOT_TOKEN'),
-        string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')
-    ]) {
-        sh """
-            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-              -d chat_id="${CHAT_ID}" \
-              --data-urlencode "text=${status} - ${env.JOB_NAME} #${env.BUILD_NUMBER}"
-        """
-    }
-}
-```
-
-This keeps application repositories focused on their own CI steps while notification logic remains centralized here.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -255,17 +235,6 @@ This keeps application repositories focused on their own CI steps while notifica
 
 Changes to this repository can affect every Jenkins Pipeline using the shared library, so modifications should remain small, reusable, and backward-compatible whenever possible.
 
-To contribute:
-
-1. 🍴 Fork or clone the repository.
-2. 🔧 Create a dedicated branch (`git checkout -b feat/my-feature`).
-3. 💬 Commit your changes (`git commit -m "feat: add my feature"`).
-4. 🚀 Push the branch.
-5. 📨 Open a Pull Request.
-6. ✅ Validate the change against a test Pipeline before merging to `main`.
-
-Avoid placing project-specific deployment logic here unless it can be safely parameterized and reused across multiple repositories.
-
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- LICENSE -->
@@ -273,8 +242,6 @@ Avoid placing project-specific deployment logic here unless it can be safely par
 ### 📄 License
 
 This repository currently does not include an explicit license file.
-
-In practice, this means the code is not formally distributed under a declared open source license. If you want to clearly allow usage, modification, and redistribution, add a `LICENSE` file and then update this section.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
