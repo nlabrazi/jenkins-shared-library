@@ -53,9 +53,9 @@ The goal is to keep individual `Jenkinsfile` files small and focused on project-
 - ♻️ Reusable Jenkins Pipeline helpers shared across multiple repositories.
 - 📦 Versioned independently from application repositories.
 - 🔐 Ephemeral `.npmrc` generation for `@nlabrazi` GitHub Packages without leaking credentials.
-- 🐳 Docker BuildKit helper (`dockerBuildWithPackages`) injecting GitHub Packages authentication secrets cleanly.
+- 🐳 Docker BuildKit helpers (`dockerBuildWithPackages` & `dockerBuildAndPush`) injecting GitHub Packages authentication secrets cleanly and publishing versioned images to **GHCR (`ghcr.io`)**.
 - 📬 Telegram notifications (`notifyTelegram`) for build status and package releases.
-- 🧩 Complete declarative Node/Nuxt pipeline (`standardNodePipeline`) for standardized projects.
+- 🧩 Complete declarative Node/Nuxt pipeline (`standardNodePipeline`) with optional GHCR image publishing for standardized projects.
 
 ---
 
@@ -91,6 +91,7 @@ This repository is not a standalone application. Jenkins loads it as a **Global 
 ```text
 jenkins-shared-library/
 ├── vars/
+│   ├── dockerBuildAndPush.groovy
 │   ├── dockerBuildWithPackages.groovy
 │   ├── notifyTelegram.groovy
 │   ├── npmCi.groovy
@@ -139,7 +140,7 @@ Secrets are stored in Jenkins Credentials and must never be committed to this re
 
 - `telegram-bot-token` (Secret text) — Telegram Bot API token
 - `telegram-chat-id` (Secret text) — Target Telegram chat ID
-- `github-packages-publish` (Secret text) — GitHub token with `read:packages` / `write:packages` for `@nlabrazi` packages
+- `github-packages-publish` (Secret text) — GitHub token with `read:packages` & `write:packages` for `@nlabrazi` npm packages and `ghcr.io` container images
 
 ---
 
@@ -157,11 +158,40 @@ standardNodePipeline(
     image: 'node:26',
     typecheck: true,
     unitTests: true,
-    build: true
+    build: true,
+    dockerImage: 'myapp',
+    dockerTarget: 'prod'
 )
 ```
 
-#### 2. Granular Helpers inside a Custom Declarative Pipeline
+When `dockerImage` is set:
+- On pull requests and `staging`, Jenkins builds the Docker image with BuildKit (`id=npmrc`) to validate the `Dockerfile` without pushing.
+- On `master` (configurable via `dockerPushBranches`), Jenkins pushes `ghcr.io/nlabrazi/<dockerImage>:sha-<shortSha>` and `:latest` with OCI `org.opencontainers.image.*` labels using an isolated ephemeral `DOCKER_CONFIG`.
+
+#### 2. Standalone GHCR Build & Push (`dockerBuildAndPush`)
+
+For custom declarative pipelines (such as multi-container repos or custom E2E pipelines):
+
+```groovy
+stage('Docker build & push') {
+    steps {
+        dockerBuildAndPush(
+            imageName: 'sentinel',
+            target: 'prod'
+        )
+    }
+}
+```
+
+Key options: `imageName` (required), `target`, `dockerfile` (`Dockerfile`), `context` (`.`), `owner` (`nlabrazi`), `registry` (`ghcr.io`), `repoName`, `useGithubPackages` (`true`), `pushBranches` (`['master']`), `tagLatest` (`true`), `tags` (`[]`), `buildArgs` (`[:]`), `credentialsId` / `ghcrCredentialsId` (`github-packages-publish`).
+
+With GHCR publishing enabled, VPS deployments require zero `.npmrc` or local builds:
+
+```bash
+docker compose pull && docker compose up -d --remove-orphans
+```
+
+#### 3. Granular Helpers inside a Custom Declarative Pipeline
 
 For repositories requiring custom stages (e.g. Python + Node, Electron, or custom Docker builds):
 
@@ -268,4 +298,4 @@ This repository currently does not include an explicit license file.
 [Telegram.io]: https://img.shields.io/badge/Telegram-26A5E4?style=for-the-badge&logo=telegram&logoColor=white
 [Telegram-url]: https://core.telegram.org/bots/api
 [GitHub.io]: https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white
-[GitHubRepo-url]: https://github.com/
+[GitHubRepo-url]: https://github.com/nlabrazi/jenkins-shared-library
