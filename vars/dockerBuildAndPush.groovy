@@ -95,24 +95,24 @@ def call(Map config = [:]) {
   }
 
   def envVars = [
-    "DOCKER_FULL_IMAGE=${fullImage}",
-    "DOCKER_REGISTRY=${registry}",
-    "DOCKER_OWNER=${owner}",
-    "DOCKER_REPO_NAME=${repoName}",
-    "DOCKER_DEFAULT_REPO_NAME=${defaultRepoName}",
-    "DOCKER_TARGET=${target}",
-    "DOCKER_FILE=${dockerfile}",
-    "DOCKER_CONTEXT=${context}",
-    "DOCKER_SECRET_ID=${secretId}",
-    "DOCKER_USE_GH_PACKAGES=${useGithubPackages ? 'true' : 'false'}",
-    "DOCKER_NPM_SCOPE=${scope}",
-    "DOCKER_NPM_REGISTRY_HOST=${npmRegistryHost}",
-    "DOCKER_GHCR_USER=${ghcrUser}",
-    "DOCKER_SHOULD_PUSH=${shouldPush ? 'true' : 'false'}",
-    "DOCKER_GIT_SHA=${fullSha}",
-    "DOCKER_CREATED_AT=${createdAt}",
-    "DOCKER_TAGS_LIST=${imageTags.join('\n')}",
-    "DOCKER_BUILD_ARGS_LIST=${serializedBuildArgsList.join('\n')}",
+    "NABSTER_DOCKER_FULL_IMAGE=${fullImage}",
+    "NABSTER_DOCKER_REGISTRY=${registry}",
+    "NABSTER_DOCKER_OWNER=${owner}",
+    "NABSTER_DOCKER_REPO_NAME=${repoName}",
+    "NABSTER_DOCKER_DEFAULT_REPO_NAME=${defaultRepoName}",
+    "NABSTER_DOCKER_TARGET=${target}",
+    "NABSTER_DOCKER_FILE=${dockerfile}",
+    "NABSTER_DOCKER_BUILD_CONTEXT=${context}",
+    "NABSTER_DOCKER_SECRET_ID=${secretId}",
+    "NABSTER_DOCKER_USE_GH_PACKAGES=${useGithubPackages ? 'true' : 'false'}",
+    "NABSTER_DOCKER_NPM_SCOPE=${scope}",
+    "NABSTER_DOCKER_NPM_REGISTRY_HOST=${npmRegistryHost}",
+    "NABSTER_DOCKER_GHCR_USER=${ghcrUser}",
+    "NABSTER_DOCKER_SHOULD_PUSH=${shouldPush ? 'true' : 'false'}",
+    "NABSTER_DOCKER_GIT_SHA=${fullSha}",
+    "NABSTER_DOCKER_CREATED_AT=${createdAt}",
+    "NABSTER_DOCKER_TAGS_LIST=${imageTags.join('\n')}",
+    "NABSTER_DOCKER_BUILD_ARGS_LIST=${serializedBuildArgsList.join('\n')}",
   ]
 
   def creds = []
@@ -140,7 +140,7 @@ def call(Map config = [:]) {
     }
     trap cleanup EXIT
 
-    REPO_NAME="${DOCKER_REPO_NAME:-}"
+    REPO_NAME="${NABSTER_DOCKER_REPO_NAME:-}"
     if [ -z "$REPO_NAME" ]; then
       ORIGIN_URL="$(git config --get remote.origin.url 2>/dev/null || true)"
       if [ -n "$ORIGIN_URL" ]; then
@@ -148,68 +148,68 @@ def call(Map config = [:]) {
       fi
     fi
     if [ -z "$REPO_NAME" ]; then
-      REPO_NAME="${DOCKER_DEFAULT_REPO_NAME:-}"
+      REPO_NAME="${NABSTER_DOCKER_DEFAULT_REPO_NAME:-}"
     fi
 
-    BUILD_CMD=(docker build -f "$DOCKER_FILE")
+    BUILD_CMD=(docker build -f "$NABSTER_DOCKER_FILE")
 
-    if [ -n "${DOCKER_TARGET:-}" ]; then
-      BUILD_CMD+=(--target "${DOCKER_TARGET}")
+    if [ -n "${NABSTER_DOCKER_TARGET:-}" ]; then
+      BUILD_CMD+=(--target "${NABSTER_DOCKER_TARGET}")
     fi
 
-    if [ "${DOCKER_USE_GH_PACKAGES:-false}" = "true" ]; then
+    if [ "${NABSTER_DOCKER_USE_GH_PACKAGES:-false}" = "true" ]; then
       NPMRC="$(mktemp)"
       printf '%s\n' \
-        "${DOCKER_NPM_SCOPE}:registry=https://${DOCKER_NPM_REGISTRY_HOST}" \
-        "//${DOCKER_NPM_REGISTRY_HOST}/:_authToken=${GITHUB_PACKAGES_TOKEN}" \
+        "${NABSTER_DOCKER_NPM_SCOPE}:registry=https://${NABSTER_DOCKER_NPM_REGISTRY_HOST}" \
+        "//${NABSTER_DOCKER_NPM_REGISTRY_HOST}/:_authToken=${GITHUB_PACKAGES_TOKEN}" \
         > "$NPMRC"
-      BUILD_CMD+=(--secret "id=${DOCKER_SECRET_ID},src=${NPMRC}")
+      BUILD_CMD+=(--secret "id=${NABSTER_DOCKER_SECRET_ID},src=${NPMRC}")
     fi
 
-    if [ -n "${DOCKER_BUILD_ARGS_LIST:-}" ]; then
+    if [ -n "${NABSTER_DOCKER_BUILD_ARGS_LIST:-}" ]; then
       while IFS= read -r build_arg; do
         if [ -n "$build_arg" ]; then
           BUILD_CMD+=(--build-arg "$build_arg")
         fi
-      done <<< "${DOCKER_BUILD_ARGS_LIST}"
+      done <<< "${NABSTER_DOCKER_BUILD_ARGS_LIST}"
     fi
 
     while IFS= read -r tag; do
       if [ -n "$tag" ]; then
         BUILD_CMD+=(-t "$tag")
       fi
-    done <<< "${DOCKER_TAGS_LIST:-}"
+    done <<< "${NABSTER_DOCKER_TAGS_LIST:-}"
 
     BUILD_CMD+=(
-      --label "org.opencontainers.image.source=https://github.com/${DOCKER_OWNER}/${REPO_NAME}"
-      --label "org.opencontainers.image.revision=${DOCKER_GIT_SHA}"
-      --label "org.opencontainers.image.created=${DOCKER_CREATED_AT}"
-      "$DOCKER_CONTEXT"
+      --label "org.opencontainers.image.source=https://github.com/${NABSTER_DOCKER_OWNER}/${REPO_NAME}"
+      --label "org.opencontainers.image.revision=${NABSTER_DOCKER_GIT_SHA}"
+      --label "org.opencontainers.image.created=${NABSTER_DOCKER_CREATED_AT}"
+      "$NABSTER_DOCKER_BUILD_CONTEXT"
     )
 
-    echo "🐳 Building ${DOCKER_FULL_IMAGE} (push=${DOCKER_SHOULD_PUSH})..."
+    echo "🐳 Building ${NABSTER_DOCKER_FULL_IMAGE} (push=${NABSTER_DOCKER_SHOULD_PUSH})..."
     DOCKER_BUILDKIT=1 "${BUILD_CMD[@]}"
 
-    if [ "$DOCKER_SHOULD_PUSH" = "true" ]; then
+    if [ "${NABSTER_DOCKER_SHOULD_PUSH:-false}" = "true" ]; then
       PUSH_TOKEN="${GHCR_PUSH_TOKEN:-${GITHUB_PACKAGES_TOKEN:-}}"
       if [ -z "$PUSH_TOKEN" ]; then
-        echo "❌ Missing registry token for pushing to ${DOCKER_REGISTRY}" >&2
+        echo "❌ Missing registry token for pushing to ${NABSTER_DOCKER_REGISTRY}" >&2
         exit 1
       fi
 
       DOCKER_CFG="$(mktemp -d)"
       export DOCKER_CONFIG="$DOCKER_CFG"
-      printf '%s' "$PUSH_TOKEN" | docker login "$DOCKER_REGISTRY" -u "$DOCKER_GHCR_USER" --password-stdin
+      printf '%s' "$PUSH_TOKEN" | docker login "$NABSTER_DOCKER_REGISTRY" -u "$NABSTER_DOCKER_GHCR_USER" --password-stdin
 
       while IFS= read -r tag; do
         if [ -n "$tag" ]; then
           echo "🚀 Pushing ${tag}..."
           docker push "$tag"
         fi
-      done <<< "$DOCKER_TAGS_LIST"
+      done <<< "${NABSTER_DOCKER_TAGS_LIST:-}"
 
-      docker logout "$DOCKER_REGISTRY" >/dev/null 2>&1 || true
-      echo "✅ Published ${DOCKER_FULL_IMAGE}"
+      docker logout "$NABSTER_DOCKER_REGISTRY" >/dev/null 2>&1 || true
+      echo "✅ Published ${NABSTER_DOCKER_FULL_IMAGE}"
     else
       echo "ℹ️ Skipping registry push (branch not enabled for push or PR build)."
     fi
