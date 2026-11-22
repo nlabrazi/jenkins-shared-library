@@ -140,7 +140,7 @@ def call(Map config = [:]) {
     }
     trap cleanup EXIT
 
-    REPO_NAME="$DOCKER_REPO_NAME"
+    REPO_NAME="${DOCKER_REPO_NAME:-}"
     if [ -z "$REPO_NAME" ]; then
       ORIGIN_URL="$(git config --get remote.origin.url 2>/dev/null || true)"
       if [ -n "$ORIGIN_URL" ]; then
@@ -148,16 +148,16 @@ def call(Map config = [:]) {
       fi
     fi
     if [ -z "$REPO_NAME" ]; then
-      REPO_NAME="$DOCKER_DEFAULT_REPO_NAME"
+      REPO_NAME="${DOCKER_DEFAULT_REPO_NAME:-}"
     fi
 
     BUILD_CMD=(docker build -f "$DOCKER_FILE")
 
-    if [ -n "$DOCKER_TARGET" ]; then
-      BUILD_CMD+=(--target "$DOCKER_TARGET")
+    if [ -n "${DOCKER_TARGET:-}" ]; then
+      BUILD_CMD+=(--target "${DOCKER_TARGET}")
     fi
 
-    if [ "$DOCKER_USE_GH_PACKAGES" = "true" ]; then
+    if [ "${DOCKER_USE_GH_PACKAGES:-false}" = "true" ]; then
       NPMRC="$(mktemp)"
       printf '%s\n' \
         "${DOCKER_NPM_SCOPE}:registry=https://${DOCKER_NPM_REGISTRY_HOST}" \
@@ -166,19 +166,19 @@ def call(Map config = [:]) {
       BUILD_CMD+=(--secret "id=${DOCKER_SECRET_ID},src=${NPMRC}")
     fi
 
-    if [ -n "$DOCKER_BUILD_ARGS_LIST" ]; then
+    if [ -n "${DOCKER_BUILD_ARGS_LIST:-}" ]; then
       while IFS= read -r build_arg; do
         if [ -n "$build_arg" ]; then
           BUILD_CMD+=(--build-arg "$build_arg")
         fi
-      done <<< "$DOCKER_BUILD_ARGS_LIST"
+      done <<< "${DOCKER_BUILD_ARGS_LIST}"
     fi
 
     while IFS= read -r tag; do
       if [ -n "$tag" ]; then
         BUILD_CMD+=(-t "$tag")
       fi
-    done <<< "$DOCKER_TAGS_LIST"
+    done <<< "${DOCKER_TAGS_LIST:-}"
 
     BUILD_CMD+=(
       --label "org.opencontainers.image.source=https://github.com/${DOCKER_OWNER}/${REPO_NAME}"
