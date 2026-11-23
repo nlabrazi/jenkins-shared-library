@@ -183,7 +183,7 @@ stage('Docker build & push') {
 }
 ```
 
-Key options: `imageName` (required), `target`, `dockerfile` (`Dockerfile`), `context` (`.`), `owner` (`nlabrazi`), `registry` (`ghcr.io`), `repoName`, `useGithubPackages` (`true`), `pushBranches` (`['master']`), `tagLatest` (`true`), `tags` (`[]`), `buildArgs` (`[:]`), `credentialsId` / `ghcrCredentialsId` (`github-packages-publish`).
+Key options: `imageName` (required), `target`, `dockerfile` (`Dockerfile`), `context` (`.`), `owner` (`nlabrazi`), `registry` (`ghcr.io`), `repoName`, `useGithubPackages` (`true`), `pushBranches` (`['master']`), `tagLatest` (`true`), `cleanupLocalShaTag` (`true`), `tags` (`[]`), `buildArgs` (`[:]`), `credentialsId` / `ghcrCredentialsId` (`github-packages-publish`).
 
 With GHCR publishing enabled, VPS deployments require zero `.npmrc` or local builds:
 
