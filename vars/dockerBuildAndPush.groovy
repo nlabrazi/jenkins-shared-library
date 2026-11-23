@@ -21,6 +21,7 @@ def call(Map config = [:]) {
   def scope = (config.scope ?: '@nlabrazi').toString().trim()
   def npmRegistryHost = (config.npmRegistryHost ?: 'npm.pkg.github.com').toString().trim()
   def tagLatest = config.containsKey('tagLatest') ? (config.tagLatest as boolean) : true
+  def cleanupLocalShaTag = config.containsKey('cleanupLocalShaTag') ? (config.cleanupLocalShaTag as boolean) : true
 
   def pushBranches = []
   def rawPushBranches = (config.pushBranches instanceof List) ? config.pushBranches : ['master']
@@ -110,6 +111,8 @@ def call(Map config = [:]) {
     "NABSTER_DOCKER_GHCR_USER=${ghcrUser}",
     "NABSTER_DOCKER_SHOULD_PUSH=${shouldPush ? 'true' : 'false'}",
     "NABSTER_DOCKER_GIT_SHA=${fullSha}",
+    "NABSTER_DOCKER_SHA_TAG=${fullImage}:sha-${shortSha}",
+    "NABSTER_DOCKER_CLEANUP_SHA_TAG=${cleanupLocalShaTag ? 'true' : 'false'}",
     "NABSTER_DOCKER_CREATED_AT=${createdAt}",
     "NABSTER_DOCKER_TAGS_LIST=${imageTags.join('\n')}",
     "NABSTER_DOCKER_BUILD_ARGS_LIST=${serializedBuildArgsList.join('\n')}",
@@ -212,6 +215,11 @@ def call(Map config = [:]) {
       echo "✅ Published ${NABSTER_DOCKER_FULL_IMAGE}"
     else
       echo "ℹ️ Skipping registry push (branch not enabled for push or PR build)."
+    fi
+
+    if [ "${NABSTER_DOCKER_CLEANUP_SHA_TAG:-true}" = "true" ] && [ -n "${NABSTER_DOCKER_SHA_TAG:-}" ]; then
+      echo "🧹 Removing local tag ${NABSTER_DOCKER_SHA_TAG} (BuildKit cache preserved)..."
+      docker rmi "${NABSTER_DOCKER_SHA_TAG}" >/dev/null 2>&1 || true
     fi
   '''
 
