@@ -2,6 +2,11 @@ def call(String status, Map details = [:]) {
   def project = env.JOB_NAME?.tokenize('/')?.first() ?: env.JOB_NAME
   def branch = env.BRANCH_NAME ?: 'unknown'
 
+  if (branch.startsWith('renovate/') && status in ['started', 'success']) {
+    echo "ℹ️ Skipping Telegram '${status}' notification for automated branch '${branch}'."
+    return
+  }
+
   def commit = env.GIT_COMMIT
         ? env.GIT_COMMIT.take(7)
         : sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
